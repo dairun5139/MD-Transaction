@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip list *)",
+      "Bash(conda info *)",
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(python3 -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(cmd.exe /c \"dir /b C:\\\\ProgramData\\\\*conda* 2>nul\")",
+      "Bash(cmd.exe /c \"dir /b C:\\\\Users\\\\%USERNAME%\\\\*conda* 2>nul\")",
+      "Bash(cmd.exe /c \"dir /b C:\\\\Users\\\\%USERNAME%\\\\AppData\\\\Local\\\\*conda* 2>nul\")",
+      "Bash(\"D:/Anaconda 3/Scripts/conda.exe\" --version)",
+      "Bash(\"D:/Anaconda 3/condabin/conda.bat\" --version)",
+      "Bash(cmd.exe /c \"D:\\\\Anaconda 3\\\\Scripts\\\\conda.exe --version\")",
+      "Bash(cmd.exe /c \"echo %PATH%\")",
+      "Bash(echo \"---exit:$?\")",
+      "Bash(powershell -Command \"[Environment]::SetEnvironmentVariable\\('PATH', [Environment]::GetEnvironmentVariable\\('PATH', 'User'\\) + ';D:\\\\Anaconda 3;D:\\\\Anaconda 3\\\\Scripts;D:\\\\Anaconda 3\\\\Library\\\\bin', 'User'\\)\")",
+      "Bash(powershell -Command \"[Environment]::GetEnvironmentVariable\\('PATH', 'User'\\)\")",
+      "Bash(powershell *)",
+      "Bash(export PATH=\"$PATH:/d/Anaconda 3:/d/Anaconda 3/Scripts:/d/Anaconda 3/Library/bin\")",
+      "Bash(conda --version)",
+      "Bash(conda create *)",
+      "Bash(conda init *)",
+      "Bash(conda env *)",
+      "Bash(ollama list *)",
+      "Bash(where python *)",
+      "Bash(cmd *)",
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git add *)",
+      "Bash(D:/softs/Git/bin/git.exe *)"
+    ]
+  }
+}

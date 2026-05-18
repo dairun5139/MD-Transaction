@@ -1,0 +1,28 @@
+# 向量库数据（自动生成，体积大）
+  chroma_db/
+
+  # Python 缓存
+  __pycache__/
+  *.pyc
+  *.pyo
+  .venv/
+  venv/
+
+  # 环境变量
+  .env
+
+  # 模型缓存
+  .cache/
+  *.bin
+  *.safetensors
+
+  # IDE
+  .idea/
+  .vscode/
+
+  # 系统文件
+  .DS_Store
+  Thumbs.db
+
+  # Claude Code 内部文件
+  .claude/
