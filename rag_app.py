@@ -2,7 +2,13 @@
 MMD Transaction RAG
 """
 import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 from pathlib import Path
+
+from masker import mask_documents, MASK_CONFIG
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
@@ -96,17 +102,24 @@ def load_vectorstore():
 
 # ======================== 4. Ask ========================
 def ask(vectorstore, question):
-    from langchain_ollama import ChatOllama
+    import requests
 
     docs = vectorstore.similarity_search(question, k=RETRIEVAL_K)
     context = "\n\n---\n\n".join(d.page_content for d in docs)
-
     prompt_text = RAG_PROMPT.format(context=context, question=question)
 
-    llm = ChatOllama(model=LLM_MODEL, temperature=0.3)
-    result = llm.invoke(prompt_text)
-    answer = result.content if hasattr(result, "content") else str(result)
-    return answer
+    try:
+        resp = requests.post(
+            "http://localhost:11434/api/generate",
+            json={"model": LLM_MODEL, "prompt": prompt_text, "stream": False},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        return resp.json().get("response", "")
+    except requests.ConnectionError:
+        return "[ERROR] 无法连接 Ollama，请先运行: ollama serve"
+    except requests.Timeout:
+        return "[ERROR] 模型推理超时，请检查 Ollama 是否正常运行"
 
 
 # ======================== 5. CLI ========================
@@ -159,6 +172,9 @@ def main():
         if not docs:
             print("ERROR: no documents found in data/")
             return
+
+        print("\n[*] Masking sensitive data...")
+        docs = mask_documents(docs, config=MASK_CONFIG)
 
         print("\n[2/3] Splitting...")
         chunks = split_documents(docs)

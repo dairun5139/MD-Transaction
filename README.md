@@ -165,6 +165,7 @@ conda run -n base python rag_app.py
 
 ```
 [STEP 1/3] 加载文档...       ← 解析 PDF/Word，提取文本
+[*] 数据脱敏...              ← 自动识别并替换敏感信息
 [STEP 2/3] 文本分块...       ← 将长文本切分为 500 字左右的语义块
 [STEP 3/3] 构建向量库...     ← 下载 BGE 中文嵌入模型 + 向量化写入 ChromaDB
 ```
@@ -254,6 +255,34 @@ LLM_MODEL = "qwen2.5:7b"   # 示例：改用通义千问
 | `CHUNK_OVERLAP` | 50 | 相邻块重叠字符数，防止语义被截断 |
 | `RETRIEVAL_K` | 4 | 每次检索返回的段落数，越大上下文越丰富但推理越慢 |
 
+### 5.5 数据脱敏配置
+
+文档入库前会自动对敏感数据进行脱敏处理。编辑 `masker.py` 中的 `MASK_CONFIG` 字典可开关各项规则：
+
+| 参数 | 默认值 | 脱敏内容 |
+|------|--------|----------|
+| `phone` | `True` | 手机号（138\*\*\*\*5678）、座机号（0475-\*\*\*\*567） |
+| `id_card` | `True` | 身份证号（保留前6后4） |
+| `credit_code` | `True` | 统一社会信用代码（保留前4后4） |
+| `email` | `True` | 邮箱地址（a\*\*@company.com） |
+| `bank_account` | `True` | 银行账号（保留后4位） |
+| `ip` | `False` | IP 地址（电力系统内网 IP 可能有业务含义，默认不脱敏） |
+| `amount` | `True` | 金额数值（\*\*\*万元） |
+| `company_name` | `True` | 公司/机构名称（保留首尾字） |
+| `person_name` | `False` | 人名（误报率高，默认关闭） |
+| `address` | `True` | 详细地址（省级保留，区县以下脱敏） |
+| `price` | `True` | 电价数值（模糊为区间，如 `[0.2-0.4]元/kWh`） |
+| `quantity` | `True` | 电量数值（抹去尾数，如 `约12000万kWh`） |
+
+脱敏效果预览（不写入 ChromaDB）：
+
+```powershell
+conda run -n base python masker.py --preview data/
+conda run -n base python masker.py --preview data/某文件.docx
+```
+
+> **提示**：修改 `MASK_CONFIG` 后需删除 `chroma_db\` 并重新启动 `rag_app.py`，才能使新配置生效。
+
 ---
 
 ## 六、项目文件说明
@@ -263,6 +292,7 @@ LLM_MODEL = "qwen2.5:7b"   # 示例：改用通义千问
 ├── README.md                       ← 本文档
 ├── MMD transaction.md              ← 项目架构文档
 ├── rag_app.py                      ← RAG 核心入口脚本
+├── masker.py                       ← 数据脱敏模块（正则规则 + 预览工具）
 ├── check_env.py                    ← 环境检查脚本
 ├── requirements.txt                ← Python 依赖清单
 ├── data/                           ← 知识源文档（用户维护）
