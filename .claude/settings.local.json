@@ -27,7 +27,11 @@
       "Bash(git init *)",
       "Bash(git remote *)",
       "Bash(git add *)",
-      "Bash(D:/softs/Git/bin/git.exe *)"
+      "Bash(D:/softs/Git/bin/git.exe *)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"print\\('A'\\); import rag_app; print\\('B'\\); from langchain_chroma import Chroma; print\\('C'\\)\")",
+      "Bash(pip show *)",
+      "Bash(git push *)"
     ]
   }
 }
