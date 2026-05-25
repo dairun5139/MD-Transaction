@@ -9,18 +9,23 @@ from pathlib import Path
 
 # ======================== 脱敏开关配置 ========================
 MASK_CONFIG = {
+    # 强隐私字段：默认继续脱敏
     "phone": True,
     "id_card": True,
     "credit_code": True,
     "email": True,
     "bank_account": True,
     "ip": False,
-    "amount": True,
-    "company_name": True,
+
+    # 业务规则类文档需要保留金额、电价、电量、小时数等关键数字，
+    # 否则会影响“结算、限价、保量保价、96点申报”等问答准确性。
+    # 如果后续处理的是合同、客户资料、交易流水，可再按需改回 True。
+    "amount": False,
+    "company_name": False,
     "person_name": False,
-    "address": True,
-    "price": True,
-    "quantity": True,
+    "address": False,
+    "price": False,
+    "quantity": False,
 }
 
 # 绕过脱敏的白名单（保留原样）
