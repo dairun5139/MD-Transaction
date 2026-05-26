@@ -31,7 +31,8 @@
       "Bash(python -c ' *)",
       "Bash(python -c \"print\\('A'\\); import rag_app; print\\('B'\\); from langchain_chroma import Chroma; print\\('C'\\)\")",
       "Bash(pip show *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git rm *)"
     ]
   }
 }

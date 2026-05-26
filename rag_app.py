@@ -45,6 +45,20 @@ RETRIEVAL_K = int(os.getenv("RAG_RETRIEVAL_K", "6"))
 PROMPT_VERSION = "rag_prompt_v2_evidence_zh"
 INGEST_VERSION = "2026-05-25-v2"
 
+
+# ======================== Retrieval Balance Config ========================
+# 先扩大候选召回，再做文档均衡，避免 700 页大 PDF 占满全部 top-k
+CANDIDATE_K = 120
+MAX_CHUNKS_PER_SOURCE = 5
+# 文档权重：短文档/规则汇编更适合作为问答依据，给予轻微加权
+# FAISS 分数通常是距离，越小越相似；后续用 score / weight 调整排序
+DOC_WEIGHTS = {
+    "蒙东新能源电站交易规则汇编_AI算法开发版.docx": 1.40,
+    "蒙东电力交易市场交易员培训教材.pdf": 1.25,
+    "20251021010756789.pdf": 1.00,
+}
+
+RETRIEVAL_K = 10
 RAG_PROMPT = """\
 你是“蒙东新能源电站交易规则”本地知识库问答助手。
 
@@ -98,8 +112,7 @@ class OllamaEmbeddings:
     def embed_query(self, text: str) -> List[float]:
         return self._embed([text])[0]
 
-    def __call__(self, text):
-        """兼容 FAISS / LangChain 旧接口：允许 embedding_function(text) 调用"""
+    def __call__(self, text: str) -> List[float]:
         return self.embed_query(text)
 
 
@@ -353,6 +366,101 @@ def _write_trace(record: Dict[str, Any]):
     LOG_DIR.mkdir(exist_ok=True)
     with TRACE_FILE.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _retrieve(vectorstore, question):
+    """
+    文档均衡检索：
+    先召回更多候选片段，再按文档权重和每文档数量上限筛选。
+    避免 20251021010756789.pdf 因页数过多而占满全部上下文。
+    """
+    candidate_k = max(CANDIDATE_K, RETRIEVAL_K)
+
+    raw_results = vectorstore.similarity_search_with_score(
+        question,
+        k=candidate_k,
+    )
+
+    def _source_name(doc):
+        meta = doc.metadata or {}
+        src = meta.get("source") or meta.get("filename") or "unknown"
+        src = str(src)
+        try:
+            return Path(src).name
+        except Exception:
+            return src
+
+    def _weight_for_source(source_name):
+        for key, weight in DOC_WEIGHTS.items():
+            if key in source_name:
+                return float(weight)
+        return 1.0
+
+    ranked = []
+    for doc, score in raw_results:
+        source_name = _source_name(doc)
+        weight = _weight_for_source(source_name)
+
+        try:
+            numeric_score = float(score)
+        except Exception:
+            numeric_score = 999999.0
+
+        # FAISS 分数通常是距离，越小越相似。
+        # 高权重文档除以 weight，使其排序更靠前。
+        adjusted_score = numeric_score / max(weight, 0.01)
+
+        ranked.append({
+            "doc": doc,
+            "score": score,
+            "source": source_name,
+            "adjusted_score": adjusted_score,
+        })
+
+    ranked.sort(key=lambda x: x["adjusted_score"])
+
+    selected = []
+    source_counts = {}
+
+    # 第一轮：每个文档最多保留 MAX_CHUNKS_PER_SOURCE 个
+    for item in ranked:
+        src = item["source"]
+        if source_counts.get(src, 0) >= MAX_CHUNKS_PER_SOURCE:
+            continue
+
+        selected.append((item["doc"], item["score"]))
+        source_counts[src] = source_counts.get(src, 0) + 1
+
+        if len(selected) >= RETRIEVAL_K:
+            break
+
+    # 第二轮：如果不够 top-k，则放宽限制补齐
+    if len(selected) < RETRIEVAL_K:
+        selected_ids = {id(doc) for doc, _ in selected}
+
+        for item in ranked:
+            doc = item["doc"]
+            if id(doc) in selected_ids:
+                continue
+
+            selected.append((doc, item["score"]))
+            selected_ids.add(id(doc))
+
+            if len(selected) >= RETRIEVAL_K:
+                break
+
+    # 打印召回来源分布
+    try:
+        dist = {}
+        for doc, _ in selected:
+            src = _source_name(doc)
+            dist[src] = dist.get(src, 0) + 1
+
+        print("  召回来源分布: " + " | ".join(f"{k}: {v}" for k, v in dist.items()))
+    except Exception:
+        pass
+
+    return selected
 
 
 def ask(vectorstore, question: str) -> Dict[str, Any]:
