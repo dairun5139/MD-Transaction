@@ -90,9 +90,6 @@ def _mask_credit_code(text):
     pattern = re.compile(r'(?<![0-9A-Za-z])([0-9A-HJ-NPQRTUWXY]{18})(?![0-9A-Za-z])')
     def _repl(m):
         s = m.group()
-        for w in WHITELIST:
-            # 如果白名单词出现在附近，跳过
-            pass
         return s[:4] + "**********" + s[-4:]
     return pattern.sub(_repl, text)
 
@@ -334,7 +331,6 @@ def _preview_text(text, config=None):
     masked = text
     for rule_name in RULE_ORDER:
         if config.get(rule_name):
-            prev = masked
             masked = MASK_RULES[rule_name](masked)
     changes = []
     # 简单的逐规则对比

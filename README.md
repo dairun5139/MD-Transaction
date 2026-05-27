@@ -27,11 +27,11 @@
   data/*.pdf ──┐
   data/*.docx ─┤
                ▼
-  ┌──────────────┐   ┌──────────────┐   ┌─────────────────────┐
-  │ 文档加载       │   │ 数据脱敏      │   │ 文本分块              │
-  │ PyPDFLoader  │ → │ masker.py    │ → │ RecursiveCharSplitter │
-  │ Docx2txtLoader│  │ 12条正则规则  │   │ chunk=650, overlap=100 │
-  └──────────────┘   └──────────────┘   └──────────┬──────────┘
+  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌─────────────────────┐
+  │ 文档加载       │   │ 文本清洗      │   │ 数据脱敏      │   │ 文本分块              │
+  │ PyPDFLoader  │ → │ clean_text() │ → │ masker.py    │ → │ RecursiveCharSplitter │
+  │ Docx2txtLoader│  │ 去控制字符/规范│   │ 12条正则规则  │   │ chunk=650, overlap=100 │
+  └──────────────┘   └──────────────┘   └──────────────┘   └──────────┬──────────┘
                                                    │
                                                    ▼
   ┌──────────────────────────────────────────────────────────┐
@@ -62,7 +62,7 @@
 |------|------|----------|
 | 操作系统 | Windows 10/11 x64 | — |
 | Python | ≥ 3.10 | `python --version` |
-| Conda | 任意版本 | `conda --version` |
+| Python 环境 | PyCharm 项目虚拟环境 | PyCharm 右下角解释器 / `python -c "import sys; print(sys.executable)"` |
 | Ollama | 最新版 | `ollama --version` |
 
 ### 2.2 模型拉取（仅首次）
@@ -90,13 +90,20 @@ docx2txt
 python-dotenv
 ```
 
+可选依赖（未来混合检索 / 评测，当前主链路未使用）：
+
+```
+jieba
+rank-bm25
+```
+
 安装：
 
 ```powershell
-conda run -n base pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-> 如 Conda 激活失败（`CommandNotFoundError`），使用 `conda run -n <环境名>` 替代 `conda activate`。
+> 项目已在 PyCharm 虚拟环境中运行。请优先使用 PyCharm Terminal 或 PyCharm Run Configuration 对应的解释器执行命令；如使用 Conda 环境，可按需替换为 `conda run -n <环境名> python ...`。
 
 ---
 
@@ -118,17 +125,47 @@ conda run -n base pip install -r requirements.txt
 ollama serve
 ```
 
-### 3.3 运行
+### 3.3 启动 Web 问答服务
 
 ```powershell
 cd "D:\Project Repository\md_transaction"
-conda run -n base python check_env.py    # 环境检查
-conda run -n base python rag_app.py      # 启动问答
+python check_env.py
+uvicorn api_app:app --host 127.0.0.1 --port 8000
 ```
 
-首次运行自动完成：文档加载 → 脱敏 → 分块 → 向量化 → 构建 FAISS 索引。后续启动直接加载已有索引，秒级就绪。
+浏览器访问：
 
-### 3.4 问答交互
+```text
+http://127.0.0.1:8000/
+```
+
+Apifox 可调试接口：
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| `GET` | `/api/health` | 服务、索引、Ollama 状态 |
+| `GET` | `/api/index/status` | 索引文件、manifest、召回参数 |
+| `POST` | `/api/ask` | 客户问答接口 |
+
+`POST /api/ask` 请求示例：
+
+```json
+{
+  "question": "蒙东电力交易的中长期合约如何结算？"
+}
+```
+
+### 3.4 命令行运行
+
+```powershell
+cd "D:\Project Repository\md_transaction"
+python check_env.py    # 环境检查
+python rag_app.py      # 启动问答
+```
+
+首次运行自动完成：文档加载 → 文本清洗 → 脱敏 → 分块 → 向量化 → 构建 FAISS 索引。后续启动直接加载已有索引，秒级就绪。
+
+### 3.5 问答交互
 
 ```
 >>> 蒙东电力交易的中长期合约如何结算？
@@ -146,23 +183,23 @@ conda run -n base python rag_app.py      # 启动问答
 
 ### 4.1 核心参数
 
-| 参数 | 默认值 | 作用 |
-|------|--------|------|
-| `LLM_MODEL` | `deepseek-r1:1.5b` | 生成模型 |
-| `EMBED_MODEL` | `nomic-embed-text` | 嵌入模型 |
-| `CHUNK_SIZE` | 650 | 文本块大小（字符数） |
-| `CHUNK_OVERLAP` | 100 | 相邻块重叠字符数 |
-| `RETRIEVAL_K` | 10 | 最终送入 LLM 的片段数 |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 服务地址 |
+| 参数 | 环境变量 | 默认值 | 作用 |
+|------|----------|--------|------|
+| `LLM_MODEL` | `RAG_LLM_MODEL` | `deepseek-r1:1.5b` | 生成模型 |
+| `EMBED_MODEL` | `RAG_EMBED_MODEL` | `nomic-embed-text` | 嵌入模型 |
+| `CHUNK_SIZE` | `RAG_CHUNK_SIZE` | 650 | 文本块大小（字符数） |
+| `CHUNK_OVERLAP` | `RAG_CHUNK_OVERLAP` | 100 | 相邻块重叠字符数 |
+| `RETRIEVAL_K` | `RAG_RETRIEVAL_K` | 10 | 最终送入 LLM 的片段数 |
+| `OLLAMA_BASE_URL` | `RAG_OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 服务地址 |
 
 ### 4.2 文档均衡检索
 
-避免 700 页大 PDF 垄断召回结果：
+避免 377 页大 PDF 垄断召回结果：
 
-| 参数 | 默认值 | 作用 |
-|------|--------|------|
-| `CANDIDATE_K` | 120 | 候选召回数（先宽召回，再均衡筛选） |
-| `MAX_CHUNKS_PER_SOURCE` | 5 | 每个文档最多保留的片段数 |
+| 参数 | 环境变量 | 默认值 | 作用 |
+|------|----------|--------|------|
+| `CANDIDATE_K` | `RAG_CANDIDATE_K` | 120 | 候选召回数（先宽召回，再均衡筛选） |
+| `MAX_CHUNKS_PER_SOURCE` | `RAG_MAX_CHUNKS_PER_SOURCE` | 5 | 每个文档最多保留的片段数 |
 
 文档权重（FAISS 距离越小越相似，高权重 = 除以权重使排名更靠前）：
 
@@ -176,15 +213,38 @@ DOC_WEIGHTS = {
 
 检索流程：FAISS 召回 120 条候选 → 按权重调整分数 → 每文档最多取 5 条 → 最终输出 10 条。
 
+**当前索引快照**（`faiss_index/`）：
+
+| 文件 | Chunks | 占比 | 页面跨度 |
+|------|--------|------|------|
+| `20251021010756789.pdf` | 451 | 88.1% | 377 页 |
+| `蒙东电力交易市场交易员培训教材.pdf` | 46 | 9.0% | 24 页 |
+| `蒙东新能源电站交易规则汇编_AI算法开发版.docx` | 15 | 2.9% | 1 段落 |
+
+> 总计 512 chunks，768维向量，chunk 平均约 456 字符。重建索引已应用文本清洗，控制字符/替换字符噪声为 0。大 PDF 占比约 88%，仍需文档均衡避免垄断召回。每条 chunk 包含 `chunk_id`、`doc_id`、`filename`、`page_label`、`section_title`、`chunk_index`、`text_hash` 等 metadata 字段。
+
+**查看索引状态**：
+
+```powershell
+python -c "
+import pickle, faiss; from collections import Counter; from pathlib import Path
+with open('faiss_index/index.pkl','rb') as f: ds, _ = pickle.load(f)
+c = Counter(ds._dict[id].metadata.get('filename','?') for id in ds._dict.keys())
+for k,v in c.most_common(): print(f'  {k}: {v}')
+idx = faiss.read_index('faiss_index/index.faiss')
+print(f'  dim={idx.d}, total={idx.ntotal}')
+"
+```
+
 ### 4.3 向量库后端切换
 
 ```powershell
 # 默认 FAISS
-conda run -n base python rag_app.py
+python rag_app.py
 
 # 切换到 ChromaDB
 $env:RAG_VECTOR_BACKEND="chroma"
-conda run -n base python rag_app.py
+python rag_app.py
 ```
 
 ### 4.4 数据脱敏配置
@@ -198,18 +258,18 @@ conda run -n base python rag_app.py
 | `credit_code` | True | 统一社会信用代码 |
 | `email` | True | 邮箱地址 |
 | `bank_account` | True | 银行账号 |
-| `amount` | True | 金额数值 |
-| `company_name` | True | 公司名称 |
-| `address` | True | 详细地址 |
-| `price` | True | 电价数值 |
-| `quantity` | True | 电量数值 |
+| `amount` | False | 金额数值 |
+| `company_name` | False | 公司名称 |
+| `address` | False | 详细地址 |
+| `price` | False | 电价数值 |
+| `quantity` | False | 电量数值 |
 | `ip` | False | IP 地址 |
 | `person_name` | False | 人名（误报率高） |
 
 预览脱敏效果（不入库）：
 
 ```powershell
-conda run -n base python masker.py --preview data/
+python masker.py --preview data/
 ```
 
 > 修改脱敏配置后需删除索引目录重建。
@@ -223,12 +283,12 @@ conda run -n base python masker.py --preview data/
 ```powershell
 # 将新文档放入 data/ → 删除索引 → 重建
 rmdir /s /q faiss_index
-conda run -n base python rag_app.py
+python rag_app.py
 ```
 
 ### 5.2 仅调整检索/回答逻辑
 
-修改 `RETRIEVAL_K`、`CANDIDATE_K`、`MAX_CHUNKS_PER_SOURCE`、`DOC_WEIGHTS`、`RAG_PROMPT` 或 `_retrieve()` 后，**无需重建索引**，重启即可生效。
+修改 `RAG_RETRIEVAL_K`、`RAG_CANDIDATE_K`、`RAG_MAX_CHUNKS_PER_SOURCE`、`DOC_WEIGHTS`、`RAG_PROMPT` 或 `_retrieve()` 后，**无需重建索引**，重启即可生效。
 
 ### 5.3 更换模型
 
@@ -236,7 +296,7 @@ conda run -n base python rag_app.py
 
 ```powershell
 $env:RAG_LLM_MODEL="qwen2.5:7b"
-conda run -n base python rag_app.py
+python rag_app.py
 ```
 
 ### 5.4 重置到初始状态
@@ -245,7 +305,7 @@ conda run -n base python rag_app.py
 rmdir /s /q faiss_index
 rmdir /s /q chroma_db
 rmdir /s /q logs
-conda run -n base python rag_app.py
+python rag_app.py
 ```
 
 ---
@@ -255,24 +315,24 @@ conda run -n base python rag_app.py
 ```
 md_transaction/
 ├── README.md                       ← 本文档
-├── rag_app.py                      ← RAG 核心入口（加载→脱敏→分块→检索→问答）
+├── rag_app.py                      ← RAG 核心入口（加载→清洗→脱敏→分块→检索→问答）
+├── api_app.py                      ← FastAPI 接口和客户问答页面
 ├── masker.py                       ← 数据脱敏模块
 ├── check_env.py                    ← 环境检查
 ├── requirements.txt                ← Python 依赖
 ├── data/                           ← 知识源文档
-├── faiss_index/                    ← FAISS 向量索引（自动生成）
+├── faiss_index/                    ← FAISS 向量索引（自动生成；重建索引时写入 manifest.json）
 ├── chroma_db/                      ← ChromaDB 向量库（可选，自动生成）
-├── logs/                           ← 问答日志 rag_trace.jsonl
-└── all-in-rag/                     ← RAG 学习参考代码
+└── logs/                           ← 问答日志 rag_trace.jsonl
 ```
 
 ---
 
 ## 七、常见问题
 
-### Q1: `conda activate` 报 CommandNotFoundError
+### Q1: 终端使用的不是 PyCharm 虚拟环境
 
-使用 `conda run -n <环境名>` 替代，效果相同。
+优先从 PyCharm Terminal 或 Run Configuration 启动；也可以用 `python -c "import sys; print(sys.executable)"` 确认当前解释器是否为项目虚拟环境。
 
 ### Q2: FAISS 写入报 `Illegal byte sequence`
 
@@ -333,6 +393,6 @@ Windows + ChromaDB 1.x 存在已知崩溃问题，项目默认使用 FAISS。如
 @echo off
 chcp 65001 >nul
 cd /d "D:\Project Repository\md_transaction"
-conda run -n base python rag_app.py
+python rag_app.py
 pause
 ```

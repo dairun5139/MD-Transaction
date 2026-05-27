@@ -1,5 +1,6 @@
 # 向量库数据（自动生成，体积大）
 chroma_db/
+faiss_index/
 
 # Python 缓存
 __pycache__/

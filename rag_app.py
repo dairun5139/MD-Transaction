@@ -14,12 +14,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import requests
+from langchain_core.embeddings import Embeddings
 
 from masker import MASK_CONFIG, mask_documents
 
@@ -29,10 +31,11 @@ CHROMA_DIR = BASE_DIR / "chroma_db"
 FAISS_DIR = BASE_DIR / "faiss_index"
 LOG_DIR = BASE_DIR / "logs"
 TRACE_FILE = LOG_DIR / "rag_trace.jsonl"
+MANIFEST_NAME = "manifest.json"
 
 LLM_MODEL = os.getenv("RAG_LLM_MODEL", "deepseek-r1:1.5b")
 EMBED_MODEL = os.getenv("RAG_EMBED_MODEL", "nomic-embed-text")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_BASE_URL = os.getenv("RAG_OLLAMA_BASE_URL", "http://localhost:11434")
 
 # 推荐默认用 FAISS，规避 Windows + ChromaDB 1.x 的底层崩溃风险。
 # 如需继续使用 ChromaDB：PowerShell 中执行 $env:RAG_VECTOR_BACKEND="chroma"
@@ -40,16 +43,16 @@ VECTOR_BACKEND = os.getenv("RAG_VECTOR_BACKEND", "faiss").lower().strip()
 
 CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "650"))
 CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "100"))
-RETRIEVAL_K = int(os.getenv("RAG_RETRIEVAL_K", "6"))
+RETRIEVAL_K = int(os.getenv("RAG_RETRIEVAL_K", "10"))
 
 PROMPT_VERSION = "rag_prompt_v2_evidence_zh"
-INGEST_VERSION = "2026-05-25-v2"
+INGEST_VERSION = "2026-05-27-v3"
 
 
 # ======================== Retrieval Balance Config ========================
 # 先扩大候选召回，再做文档均衡，避免 700 页大 PDF 占满全部 top-k
-CANDIDATE_K = 120
-MAX_CHUNKS_PER_SOURCE = 5
+CANDIDATE_K = int(os.getenv("RAG_CANDIDATE_K", "120"))
+MAX_CHUNKS_PER_SOURCE = int(os.getenv("RAG_MAX_CHUNKS_PER_SOURCE", "5"))
 # 文档权重：短文档/规则汇编更适合作为问答依据，给予轻微加权
 # FAISS 分数通常是距离，越小越相似；后续用 score / weight 调整排序
 DOC_WEIGHTS = {
@@ -58,7 +61,6 @@ DOC_WEIGHTS = {
     "20251021010756789.pdf": 1.00,
 }
 
-RETRIEVAL_K = 10
 RAG_PROMPT = """\
 你是“蒙东新能源电站交易规则”本地知识库问答助手。
 
@@ -66,8 +68,10 @@ RAG_PROMPT = """\
 1. 只能依据【参考片段】回答，不得编造未出现在片段中的规则、数值或流程。
 2. 涉及规则、时间、价格、电量、结算、主体条件时，必须在句末标注来源编号，如 [S1]、[S2]。
 3. 如果参考片段不足以回答，请明确说：“当前知识库未检索到足够依据”，并说明还需要查哪类文件。
-4. 不要输出思考过程，不要输出与问题无关的背景。
-5. 优先使用中文，表达要适合电力交易员阅读。
+4. 如果片段只是封面、目录、致谢、背景介绍或考题，且不能直接回答问题，不得作为结论依据。
+5. 涉及“不得、不结转、除外、应当、必须、不得超过、按月、按日”等规则词时，不得反向改写原文含义。
+6. 不要输出思考过程，不要输出与问题无关的背景。
+7. 优先使用中文，表达要适合电力交易员阅读。
 
 【参考片段】
 {context}
@@ -83,7 +87,7 @@ RAG_PROMPT = """\
 
 
 # ======================== 0. Ollama Embeddings ========================
-class OllamaEmbeddings:
+class OllamaEmbeddings(Embeddings):
     """
     用 Ollama HTTP API 做文本向量化，完全绕开 PyTorch / sentence-transformers。
     需要本地已拉取：ollama pull nomic-embed-text
@@ -131,6 +135,7 @@ def load_documents(data_dir: Path):
         for d in loaded:
             d.metadata["filename"] = fp.name
             d.metadata["doc_type"] = "pdf"
+            d.metadata["source"] = str(fp.relative_to(BASE_DIR))
         docs.extend(loaded)
 
     for fp in sorted(data_dir.glob("*.docx")):
@@ -139,10 +144,125 @@ def load_documents(data_dir: Path):
         for d in loaded:
             d.metadata["filename"] = fp.name
             d.metadata["doc_type"] = "docx"
+            d.metadata["source"] = str(fp.relative_to(BASE_DIR))
         docs.extend(loaded)
 
     print(f"  loaded {len(docs)} pages/sections")
     return docs
+
+
+# ======================== 1.5 Clean + Index Manifest ========================
+CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def clean_text(text: str) -> str:
+    """清理 PDF 抽取噪声，避免控制字符污染 embedding 和 prompt。"""
+    if not text:
+        return ""
+    text = CONTROL_CHARS_RE.sub(" ", text)
+    text = text.replace("\ufffd", " ")
+    lines = []
+    for raw in text.splitlines():
+        line = re.sub(r"[ \t]+", " ", raw).strip()
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def clean_documents(docs):
+    changed = 0
+    for doc in docs:
+        original = doc.page_content
+        cleaned = clean_text(original)
+        if cleaned != original:
+            changed += 1
+            doc.page_content = cleaned
+            doc.metadata["cleaned"] = True
+    if changed:
+        print(f"  cleaned text noise in {changed} pages/sections")
+    return docs
+
+
+def _relative_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(BASE_DIR))
+    except ValueError:
+        return str(path)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _data_files_manifest() -> List[Dict[str, Any]]:
+    files = sorted(DATA_DIR.glob("*.pdf")) + sorted(DATA_DIR.glob("*.docx"))
+    return [
+        {
+            "path": _relative_path(fp),
+            "size": fp.stat().st_size,
+            "mtime_ns": fp.stat().st_mtime_ns,
+            "sha256": _sha256_file(fp),
+        }
+        for fp in files
+    ]
+
+
+def _mask_config_hash() -> str:
+    payload = json.dumps(MASK_CONFIG, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def current_index_manifest() -> Dict[str, Any]:
+    return {
+        "ingest_version": INGEST_VERSION,
+        "vector_backend": VECTOR_BACKEND,
+        "embed_model": EMBED_MODEL,
+        "chunk_size": CHUNK_SIZE,
+        "chunk_overlap": CHUNK_OVERLAP,
+        "mask_config_hash": _mask_config_hash(),
+        "data_files": _data_files_manifest(),
+    }
+
+
+def _manifest_path(index_dir: Path) -> Path:
+    return index_dir / MANIFEST_NAME
+
+
+def write_index_manifest(index_dir: Path):
+    index_dir.mkdir(exist_ok=True)
+    with _manifest_path(index_dir).open("w", encoding="utf-8") as f:
+        json.dump(current_index_manifest(), f, ensure_ascii=False, indent=2)
+
+
+def _manifest_diff(saved: Dict[str, Any], current: Dict[str, Any]) -> List[str]:
+    changed = []
+    for key in ("ingest_version", "vector_backend", "embed_model", "chunk_size", "chunk_overlap", "mask_config_hash"):
+        if saved.get(key) != current.get(key):
+            changed.append(key)
+    saved_files = {item.get("path"): item for item in saved.get("data_files", [])}
+    current_files = {item.get("path"): item for item in current.get("data_files", [])}
+    if saved_files != current_files:
+        changed.append("data_files")
+    return changed
+
+
+def warn_if_index_stale(index_dir: Path):
+    manifest_file = _manifest_path(index_dir)
+    if not manifest_file.exists():
+        print("  [WARN] cached index has no manifest; rebuild once after optimization to enable freshness checks.")
+        return
+    try:
+        saved = json.loads(manifest_file.read_text(encoding="utf-8"))
+        changed = _manifest_diff(saved, current_index_manifest())
+    except Exception as e:
+        print(f"  [WARN] failed to read index manifest: {e}")
+        return
+    if changed:
+        print(f"  [WARN] cached index may be stale; changed: {', '.join(changed)}")
 
 
 # ======================== 2. Split + Metadata ========================
@@ -239,6 +359,7 @@ def build_faiss_vectorstore(chunks):
     if FAISS_DIR.exists():
         shutil.rmtree(FAISS_DIR)
     vs.save_local(str(FAISS_DIR))
+    write_index_manifest(FAISS_DIR)
     return vs
 
 
@@ -249,6 +370,7 @@ def load_faiss_vectorstore():
     pkl_file = FAISS_DIR / "index.pkl"
     if not index_file.exists() or not pkl_file.exists():
         return None
+    warn_if_index_stale(FAISS_DIR)
     embeddings = OllamaEmbeddings()
     return FAISS.load_local(
         str(FAISS_DIR),
@@ -263,11 +385,13 @@ def build_chroma_vectorstore(chunks):
     embeddings = OllamaEmbeddings()
     print(f"  embedding via Ollama: {EMBED_MODEL}")
     print(f"  building ChromaDB -> {CHROMA_DIR}")
-    return Chroma.from_documents(
+    vs = Chroma.from_documents(
         documents=chunks,
         embedding=embeddings,
         persist_directory=str(CHROMA_DIR),
     )
+    write_index_manifest(CHROMA_DIR)
+    return vs
 
 
 def load_chroma_vectorstore():
@@ -275,6 +399,7 @@ def load_chroma_vectorstore():
 
     if not (CHROMA_DIR / "chroma.sqlite3").exists():
         return None
+    warn_if_index_stale(CHROMA_DIR)
     embeddings = OllamaEmbeddings()
     return Chroma(
         persist_directory=str(CHROMA_DIR),
@@ -335,14 +460,6 @@ def _format_context(results: List[Tuple[Any, float]]) -> Tuple[str, List[Dict[st
     return "\n\n---\n\n".join(context_blocks), sources
 
 
-def _retrieve(vectorstore, question: str):
-    """兼容 FAISS / Chroma：优先返回带分数的检索结果。"""
-    if hasattr(vectorstore, "similarity_search_with_score"):
-        return vectorstore.similarity_search_with_score(question, k=RETRIEVAL_K)
-    docs = vectorstore.similarity_search(question, k=RETRIEVAL_K)
-    return [(d, None) for d in docs]
-
-
 def _call_ollama(prompt_text: str) -> str:
     resp = requests.post(
         f"{OLLAMA_BASE_URL.rstrip('/')}/api/generate",
@@ -368,7 +485,14 @@ def _write_trace(record: Dict[str, Any]):
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def _retrieve(vectorstore, question):
+def _search_with_scores(vectorstore, question: str, k: int) -> List[Tuple[Any, Any]]:
+    if hasattr(vectorstore, "similarity_search_with_score"):
+        return vectorstore.similarity_search_with_score(question, k=k)
+    docs = vectorstore.similarity_search(question, k=k)
+    return [(doc, None) for doc in docs]
+
+
+def _retrieve(vectorstore, question: str) -> List[Tuple[Any, Any]]:
     """
     文档均衡检索：
     先召回更多候选片段，再按文档权重和每文档数量上限筛选。
@@ -376,10 +500,7 @@ def _retrieve(vectorstore, question):
     """
     candidate_k = max(CANDIDATE_K, RETRIEVAL_K)
 
-    raw_results = vectorstore.similarity_search_with_score(
-        question,
-        k=candidate_k,
-    )
+    raw_results = _search_with_scores(vectorstore, question, candidate_k)
 
     def _source_name(doc):
         meta = doc.metadata or {}
@@ -397,14 +518,14 @@ def _retrieve(vectorstore, question):
         return 1.0
 
     ranked = []
-    for doc, score in raw_results:
+    for rank, (doc, score) in enumerate(raw_results, start=1):
         source_name = _source_name(doc)
         weight = _weight_for_source(source_name)
 
         try:
-            numeric_score = float(score)
+            numeric_score = float(score) if score is not None else float(rank)
         except Exception:
-            numeric_score = 999999.0
+            numeric_score = float(rank)
 
         # FAISS 分数通常是距离，越小越相似。
         # 高权重文档除以 weight，使其排序更靠前。
@@ -486,6 +607,8 @@ def ask(vectorstore, question: str) -> Dict[str, Any]:
         "embed_model": EMBED_MODEL,
         "vector_backend": VECTOR_BACKEND,
         "retrieval_k": RETRIEVAL_K,
+        "candidate_k": CANDIDATE_K,
+        "max_chunks_per_source": MAX_CHUNKS_PER_SOURCE,
         "prompt_version": PROMPT_VERSION,
     }
     _write_trace(result)
@@ -558,6 +681,9 @@ def main():
         if not docs:
             print("ERROR: no documents found in data/")
             return
+
+        print("\n[*] Cleaning extracted text...")
+        docs = clean_documents(docs)
 
         print("\n[*] Masking sensitive data...")
         docs = mask_documents(docs, config=MASK_CONFIG)
