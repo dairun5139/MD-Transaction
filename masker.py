@@ -1,5 +1,5 @@
 """
-MMD Transaction — 数据脱敏模块
+MD Transaction — 数据脱敏模块
 在对知识源建立向量库之前，自动检测并脱敏文本中的敏感信息。
 纯正则实现，无额外依赖。
 """
@@ -346,18 +346,40 @@ def _preview_text(text, config=None):
 
 def _preview_file(filepath, config=None):
     """预览单个文件的前 5 页脱敏效果。"""
-    from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
-
     fp = Path(filepath)
+    docs = []
+
     if fp.suffix.lower() == ".pdf":
-        loader = PyPDFLoader(str(fp))
+        try:
+            import pdfplumber
+            with pdfplumber.open(str(fp)) as pdf:
+                for page in pdf.pages[:5]:
+                    text = page.extract_text() or ""
+                    if text.strip():
+                        # 构造简易 Document 对象以复用预览逻辑
+                        class _FakeDoc:
+                            pass
+                        d = _FakeDoc()
+                        d.page_content = text
+                        docs.append(d)
+        except Exception:
+            # pdfplumber 不可用时降级为 PyPDFLoader
+            from langchain_community.document_loaders import PyPDFLoader
+            docs = PyPDFLoader(str(fp)).load()
     elif fp.suffix.lower() == ".docx":
-        loader = Docx2txtLoader(str(fp))
+        from docx import Document as DocxDocument
+        doc = DocxDocument(str(fp))
+        text = "\n\n".join(p.text for p in doc.paragraphs if p.text and p.text.strip())
+        if text:
+            class _FakeDoc:
+                pass
+            d = _FakeDoc()
+            d.page_content = text
+            docs.append(d)
     else:
         print(f"  unsupported file type: {fp.suffix}")
         return
 
-    docs = loader.load()
     print(f"  File: {fp.name}  ({len(docs)} pages/sections)")
     print("=" * 70)
 
@@ -389,7 +411,7 @@ def preview(data_path, config=None):
 if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == "--preview":
         target = sys.argv[2] if len(sys.argv) >= 3 else "data"
-        print("MMD Transaction — 脱敏效果预览")
+        print("MD Transaction — 脱敏效果预览")
         print(f"  目标: {target}")
         print()
         preview(target)

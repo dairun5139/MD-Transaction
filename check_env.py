@@ -1,13 +1,11 @@
-"""环境检查 — 验证 MMD Transaction RAG 依赖和 Ollama 服务。"""
+"""环境检查 — 验证 MD Transaction RAG 依赖和 Ollama 服务。"""
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 CHECKS = []
-VECTOR_BACKEND = os.getenv("RAG_VECTOR_BACKEND", "faiss").lower().strip()
 
 
 def add_check(label: str, status: str, detail: str = "", required: bool = True):
@@ -31,7 +29,7 @@ else:
 
 add_check("Python executable", "OK", sys.executable)
 
-# Core dependencies used by the improved main chain.
+# Core dependencies used by the FAISS main chain.
 check("langchain", "langchain")
 check("langchain_community", "langchain_community", "langchain-community")
 check("langchain_text_splitters", "langchain_text_splitters", "langchain-text-splitters")
@@ -40,20 +38,7 @@ check("pypdf", "pypdf")
 check("docx2txt", "docx2txt")
 check("fastapi", "fastapi")
 check("uvicorn", "uvicorn")
-
-if VECTOR_BACKEND == "chroma":
-    check("langchain_chroma", "langchain_chroma", "langchain-chroma")
-    check("chromadb", "chromadb")
-    check("faiss", "faiss", "faiss-cpu", required=False)
-else:
-    check("faiss", "faiss", "faiss-cpu")
-    check("langchain_chroma", "langchain_chroma", "langchain-chroma", required=False)
-    check("chromadb", "chromadb", required=False)
-
-# Optional utilities / future hybrid retrieval.
-check("dotenv", "dotenv", "python-dotenv", required=False)
-check("jieba", "jieba", required=False)
-check("rank_bm25", "rank_bm25", "rank-bm25", required=False)
+check("faiss", "faiss", "faiss-cpu")
 
 # Ollama checks should be quick and should not block too long.
 try:
@@ -83,8 +68,8 @@ add_check("知识源文件", "OK" if files else "EMPTY", f"PDF: {len(pdfs)}, DOC
 
 # Output.
 print("=" * 64)
-print("  MMD Transaction — 环境检查")
-print(f"  vector backend: {VECTOR_BACKEND}")
+print("  MD Transaction — 环境检查")
+print("  vector backend: faiss")
 print("=" * 64)
 for label, status, detail, required in CHECKS:
     icon = {
@@ -108,6 +93,6 @@ print("=" * 64)
 if fail:
     print(f"  当前解释器下有 {fail} 项核心依赖缺失；如在 PyCharm 中运行，请确认使用的是项目虚拟环境。")
 elif warn:
-    print(f"  核心依赖通过，但有 {warn} 项提醒；可选依赖缺失不影响默认主链路。")
+    print(f"  核心依赖通过，但有 {warn} 项提醒。")
 else:
     print("  所有检查通过，可以运行: python rag_app.py")

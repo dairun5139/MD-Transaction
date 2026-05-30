@@ -1,25 +1,20 @@
-# MMD Transaction RAG - core runtime dependencies
+# MD Transaction RAG - runtime dependencies
 langchain>=0.3.0
 langchain-community>=0.3.0
 langchain-text-splitters>=0.3.0
 
-# Vector stores: FAISS is the default stable local backend; Chroma is optional fallback.
+# Vector store
 faiss-cpu>=1.7.4
-langchain-chroma>=0.1.0
-chromadb==0.5.23
 
 # Document parsing
 pypdf>=5.0.0
+pdfplumber>=0.10.0
+python-docx>=0.8.11
 docx2txt>=0.8
 
-# Ollama HTTP calls and utilities
+# Ollama HTTP calls
 requests>=2.31.0
-python-dotenv>=1.0.0
 
 # API service
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
-
-# Optional future hybrid retrieval
-jieba>=0.42.1
-rank-bm25>=0.2.2

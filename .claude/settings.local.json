@@ -33,7 +33,10 @@
       "Bash(pip show *)",
       "Bash(git push *)",
       "Bash(git rm *)",
-      "Bash(conda run *)"
+      "Bash(conda run *)",
+      "Bash(pip install *)",
+      "Bash(python *)",
+      "Bash(New-Item *)"
     ]
   }
 }
