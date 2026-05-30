@@ -44,10 +44,10 @@ check("faiss", "faiss", "faiss-cpu")
 try:
     r = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=8)
     out = r.stdout.lower()
-    if "deepseek-r1" in out:
-        add_check("Ollama deepseek-r1", "OK")
+    if "qwen2.5" in out:
+        add_check("Ollama qwen2.5", "OK")
     else:
-        add_check("Ollama deepseek-r1", "WARN", "未找到 deepseek-r1，请运行: ollama pull deepseek-r1:1.5b")
+        add_check("Ollama qwen2.5", "WARN", "未找到 qwen2.5，请运行: ollama pull qwen2.5:7b")
     if "nomic-embed-text" in out:
         add_check("Ollama nomic-embed-text", "OK")
     else:

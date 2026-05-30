@@ -93,7 +93,7 @@ faiss_index/
 | 向量化 | Ollama `nomic-embed-text` | 生成 768 维文本向量；chunk 附带文档/章节前缀以增强区分度 |
 | 向量库 | FAISS | 本地向量检索，当前唯一后端 |
 | 检索增强 | 关键词重排 + 噪音过滤 + Query 改写 | 弥补纯语义检索不足，过滤目录页噪音，短问题自动扩展 |
-| 生成模型 | Ollama `deepseek-r1:1.5b` | 本地回答生成 |
+| 生成模型 | Ollama `qwen2.5:7b` | 本地回答生成 |
 | 答案校验 | `_verify_answer()` | 否定词反转自动检测并追加警告 |
 | API 服务 | FastAPI + Uvicorn | Web/API 服务入口 |
 | Web 页面 | `web/index.html` | 浏览器问答界面（Enter 提交、Alt+Enter 换行） |
@@ -143,7 +143,7 @@ md_transaction/
 |---|---|
 | Python | 3.10+ |
 | Ollama | 已安装并可执行 `ollama list` |
-| 生成模型 | `deepseek-r1:1.5b` |
+| 生成模型 | `qwen2.5:7b` |
 | 嵌入模型 | `nomic-embed-text` |
 | 系统 | 当前按 Windows + PyCharm 虚拟环境验证 |
 
@@ -157,7 +157,7 @@ python -m pip install -r requirements.txt
 拉取 Ollama 模型：
 
 ```powershell
-ollama pull deepseek-r1:1.5b
+ollama pull qwen2.5:7b
 ollama pull nomic-embed-text
 ollama list
 ```
@@ -273,7 +273,7 @@ python api_app.py
 
 | 环境变量 | 默认值 | 说明 |
 |---|---:|---|
-| `RAG_LLM_MODEL` | `deepseek-r1:1.5b` | 生成模型 |
+| `RAG_LLM_MODEL` | `qwen2.5:7b` | 生成模型 |
 | `RAG_EMBED_MODEL` | `nomic-embed-text` | 嵌入模型 |
 | `RAG_OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 地址 |
 | `RAG_CHUNK_SIZE` | `650` | chunk 字符数 |
@@ -359,7 +359,7 @@ python masker.py --preview data/
 - 混合检索：关键词重排 + 噪音降权 + 文档均衡。
 - Query 改写（短问题自动扩展业务术语）。
 - 答案校验（否定词反转自动检测 + 警告）。
-- 证据约束 Prompt v3。
+- 证据约束 Prompt v4（适配 qwen2.5:7b）。
 - CLI 问答 + FastAPI Web/API 一键启动。
 - 问答日志追踪。
 - 评测系统（15 题 + `python eval/run.py` 自动化回归）。
@@ -368,7 +368,7 @@ python masker.py --preview data/
 ### 短期优化
 
 - 引入 BM25 或关键词召回，与向量召回做融合。
-- 换用更大模型（qwen2.5:7b 等）提升指令遵循能力。
+- 引入 Cross-Encoder Reranker，进一步提高 sources 精度。
 - 增加客户反馈字段，如”有用/无用/答非所问”。
 
 ### 中期优化

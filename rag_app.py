@@ -27,7 +27,7 @@ LOG_DIR = BASE_DIR / "logs"
 TRACE_FILE = LOG_DIR / "rag_trace.jsonl"
 MANIFEST_NAME = "manifest.json"
 
-LLM_MODEL = os.getenv("RAG_LLM_MODEL", "deepseek-r1:1.5b")
+LLM_MODEL = os.getenv("RAG_LLM_MODEL", "qwen2.5:7b")
 EMBED_MODEL = os.getenv("RAG_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_BASE_URL = os.getenv("RAG_OLLAMA_BASE_URL", "http://localhost:11434")
 VECTOR_BACKEND = "faiss"
@@ -36,7 +36,7 @@ CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "650"))
 CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "100"))
 RETRIEVAL_K = int(os.getenv("RAG_RETRIEVAL_K", "10"))
 
-PROMPT_VERSION = "rag_prompt_v3_enhanced"
+PROMPT_VERSION = "rag_prompt_v4_qwen"
 INGEST_VERSION = "2026-05-30-v4"
 
 
@@ -61,14 +61,10 @@ RAG_PROMPT = """\
 2. 涉及规则、时间、价格、电量、结算、主体条件时，必须在句末标注来源编号，如 [S1]、[S2]。
    数值必须与片段中的数字完全一致，不得四舍五入或近似。
 3. 如果参考片段不足以回答，请明确说：”当前知识库未检索到足够依据”，并说明还需要查哪类文件。
-   不要退而求其次用相似但不直接的内容拼凑。
-4. 如果片段只是封面、目录、致谢、背景介绍或考题，且不能直接回答问题，不得作为结论依据。
-5. 涉及”不得、不结转、除外、应当、必须、不得超过、按月、按日”等规则词时，不得反向改写原文含义。
-   如果原文说”不得参与”，回答不能变成”可以参与”或”参与”。
-6. 当多个来源的规则存在差异时，优先采信正式规则文件，并在注意事项中说明差异。
-7. 不要输出思考过程，不要输出与问题无关的背景。
-8. 优先使用中文，表达要适合电力交易员阅读。
-   条件性规则（”如...则...”）需完整保留条件，不可省略前提只给结论。
+4. 涉及”不得、不结转、除外、应当、必须、不得超过、按月、按日”等规则词时，不得反向改写原文含义。
+5. 当多个来源的规则存在差异时，优先采信正式规则文件，并在注意事项中说明差异。
+6. 条件性规则（”如...则...”）需完整保留条件和结论，不可省略前提。
+7. 表达简洁专业，适合电力交易员阅读。
 
 【参考片段】
 {context}
