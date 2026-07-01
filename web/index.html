@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MD Transaction RAG</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --panel: #ffffff;
+      --text: #1d2129;
+      --text-secondary: #4e5969;
+      --muted: #86909c;
+      --line: #e5e6eb;
+      --primary: #165dff;
+      --primary-hover: #0e42d2;
+      --primary-light: #e8f0fe;
+      --ok: #00b42a;
+      --warn: #ff7d00;
+      --shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* ---- header ---- */
+    header {
+      height: 52px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+    .status {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--warn);
+      flex-shrink: 0;
+    }
+    .dot.ok { background: var(--ok); }
+
+    /* ---- main layout ---- */
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 16px;
+      padding: 16px;
+      max-width: 1400px;
+      margin: 0 auto;
+      height: calc(100vh - 52px);
+    }
+
+    /* ---- workspace ---- */
+    .workspace, .side {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-height: 0;
+    }
+    .workspace {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+    }
+    .answer {
+      padding: 24px;
+      overflow: auto;
+      line-height: 1.8;
+    }
+    .answer h2 {
+      font-size: 18px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    .answer-text {
+      white-space: pre-wrap;
+      font-size: 15px;
+      line-height: 1.85;
+    }
+    .placeholder {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+    .placeholder strong { display: block; margin-bottom: 4px; color: var(--text-secondary); }
+    .error {
+      color: #c02c2c;
+      border: 1px solid #f5c6c6;
+      background: #fef5f5;
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      line-height: 1.7;
+    }
+
+    /* ---- composer ---- */
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .composer-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 72px;
+      max-height: 160px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 15px;
+      line-height: 1.6;
+      font-family: inherit;
+      outline: none;
+      color: var(--text);
+      background: #fafbfc;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    textarea:focus {
+      border-color: var(--primary);
+      background: #fff;
+    }
+    button {
+      height: 42px;
+      min-width: 88px;
+      border: 0;
+      border-radius: var(--radius);
+      background: var(--primary);
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    button:hover { background: var(--primary-hover); }
+    button:disabled {
+      cursor: not-allowed;
+      background: #94b4f5;
+    }
+
+    /* ---- side panel ---- */
+    .side {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+    .side-head {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .side-title { font-size: 15px; font-weight: 700; }
+    .source-count { font-size: 13px; color: var(--muted); }
+    .sources {
+      overflow: auto;
+      padding: 10px 14px 14px;
+    }
+
+    /* ---- source card ---- */
+    .source {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 14px;
+      margin-bottom: 10px;
+      background: #fafbfc;
+      transition: border-color 0.15s;
+    }
+    .source:hover { border-color: #c9cdd4; }
+    .source-rank {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--primary);
+      padding: 1px 8px;
+      border-radius: 10px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .source-file {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+    .source-loc {
+      font-size: 13px;
+      color: var(--primary);
+      background: var(--primary-light);
+      padding: 4px 10px;
+      border-radius: 5px;
+      margin-bottom: 8px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .excerpt {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+    }
+
+    /* ---- responsive ---- */
+    @media (max-width: 900px) {
+      header { padding: 0 14px; }
+      main {
+        grid-template-columns: 1fr;
+        height: auto;
+        padding: 10px;
+      }
+      .workspace { min-height: 65vh; }
+      .side { max-height: 60vh; }
+      .composer {
+        grid-template-columns: 1fr;
+      }
+      button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">⚡ MD Transaction RAG</div>
+    <div class="status">
+      <span id="dot" class="dot"></span>
+      <span id="status">正在检查服务...</span>
+    </div>
+  </header>
+  <main>
+    <section class="workspace">
+      <div id="answer" class="answer">
+        <div class="placeholder">
+          <div>
+            <strong>输入电力交易规则问题</strong>
+            回答将附带来源片段、章节定位和页码。
+          </div>
+        </div>
+      </div>
+      <form id="form" class="composer">
+        <div class="composer-inner">
+          <textarea id="question" placeholder="例如：蒙东电力交易的中长期合约如何结算？" rows="2"></textarea>
+        </div>
+        <button id="submit" type="submit">提问</button>
+      </form>
+    </section>
+    <aside class="side">
+      <div class="side-head">
+        <div class="side-title">📎 参考片段</div>
+        <div id="sourceCount" class="source-count">0 条</div>
+      </div>
+      <div id="sources" class="sources"></div>
+    </aside>
+  </main>
+  <script>
+    const form = document.getElementById("form");
+    const question = document.getElementById("question");
+    const submit = document.getElementById("submit");
+    const answer = document.getElementById("answer");
+    const sources = document.getElementById("sources");
+    const sourceCount = document.getElementById("sourceCount");
+    const statusText = document.getElementById("status");
+    const dot = document.getElementById("dot");
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[ch]));
+    }
+
+    async function checkHealth() {
+      try {
+        const res = await fetch("/api/health");
+        const data = await res.json();
+        const ok = data.status === "ok";
+        dot.classList.toggle("ok", ok);
+        statusText.textContent = ok ? "服务正常" : "服务可访问，依赖需检查";
+      } catch (err) {
+        dot.classList.remove("ok");
+        statusText.textContent = "服务不可用";
+      }
+    }
+
+    function formatScore(score) {
+      if (typeof score !== "number") return "N/A";
+      // FAISS L2 距离 → 相似度映射（越小越相似）
+      if (score <= 0.15) return "★★★★★";
+      if (score <= 0.35) return "★★★★☆";
+      if (score <= 0.60) return "★★★☆☆";
+      if (score <= 1.00) return "★★☆☆☆";
+      return "★☆☆☆☆";
+    }
+
+    function renderSources(items) {
+      sourceCount.textContent = `${items.length} 条`;
+      if (!items.length) {
+        sources.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px;">暂无参考片段</div>';
+        return;
+      }
+      sources.innerHTML = items.map(s => `
+        <div class="source" title="chunk_id: ${escapeHtml(s.chunk_id)}">
+          <div style="margin-bottom:6px;">
+            <span class="source-rank">${escapeHtml(s.id)}</span>
+            <span class="source-file">${escapeHtml(s.filename)}</span>
+            ${typeof s.score === "number" ? `<span style="font-size:12px;color:var(--muted);margin-left:4px;">${formatScore(s.score)}</span>` : ""}
+          </div>
+          ${s.location_text ? `<div class="source-loc">📍 ${escapeHtml(s.location_text)}</div>` : ""}
+          <div class="excerpt">${escapeHtml(s.excerpt)}</div>
+        </div>
+      `).join("");
+    }
+
+    // ---- 键盘交互：Enter 提交，Alt+Enter 换行 ----
+    question.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+      // Alt+Enter / Shift+Enter / Ctrl+Enter → 默认行为（换行）
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const text = question.value.trim();
+      if (!text) return;
+      submit.disabled = true;
+      submit.textContent = "生成中…";
+      answer.innerHTML = '<div class="placeholder"><div>⏳ 正在检索并生成回答...</div></div>';
+      renderSources([]);
+      try {
+        const res = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: text })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || "请求失败");
+        }
+        answer.innerHTML = `<h2>📝 回答</h2><div class="answer-text">${escapeHtml(data.answer)}</div>`;
+        renderSources(data.sources || []);
+      } catch (err) {
+        answer.innerHTML = `<div class="error">❌ ${escapeHtml(err.message || err)}</div>`;
+      } finally {
+        submit.disabled = false;
+        submit.textContent = "提问";
+      }
+    });
+
+    // 自动调整 textarea 高度
+    question.addEventListener("input", () => {
+      question.style.height = "auto";
+      question.style.height = Math.min(question.scrollHeight, 160) + "px";
+    });
+
+    checkHealth();
+  </script>
+</body>
+</html>

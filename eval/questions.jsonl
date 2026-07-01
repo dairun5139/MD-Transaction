@@ -1,0 +1,15 @@
+{"id": "E001", "category": "结算", "risk": "high", "question": "蒙东电力交易中长期合约如何结算？结算周期是多久？", "must_contain": ["月", "结算"], "must_not": [], "notes": "基础结算规则，必须命中月度结算"}
+{"id": "E002", "category": "注册", "risk": "high", "question": "电力市场主体注册需要什么条件？", "must_contain": ["注册", "主体"], "must_not": [], "notes": "注册条件必须完整"}
+{"id": "E003", "category": "结算", "risk": "high", "question": "什么是偏差电量？偏差考核标准是什么？", "must_contain": ["偏差"], "must_not": [], "notes": "偏差定义和考核标准"}
+{"id": "E004", "category": "申报", "risk": "medium", "question": "电力交易申报的时间和流程是怎样的？", "must_contain": ["申报"], "must_not": [], "notes": "申报流程"}
+{"id": "E005", "category": "价格", "risk": "high", "question": "电力交易的限价是如何规定的？度电价格有没有上下限？", "must_contain": ["限价", "价格"], "must_not": [], "notes": "价格限制规则"}
+{"id": "E006", "category": "规则否定", "risk": "high", "question": "哪些情况下市场主体不得参与电力交易？", "must_contain": ["不得"], "must_not": ["可以参与"], "notes": "否定词校验，禁止性规定"}
+{"id": "E007", "category": "电量", "risk": "medium", "question": "保量保价的含义是什么？哪些电量适用保量保价？", "must_contain": ["保量"], "must_not": [], "notes": "保量保价概念"}
+{"id": "E008", "category": "不可回答", "risk": "low", "question": "明天蒙东地区的现货电价是多少？", "must_contain": [], "must_not": [], "expect_refuse": true, "notes": "实时电价问题，知识库不应编造"}
+{"id": "E009", "category": "合同", "risk": "medium", "question": "入市协议和购售电合同有什么区别？", "must_contain": ["合同", "协议"], "must_not": [], "notes": "合同类型区分"}
+{"id": "E010", "category": "结算", "risk": "medium", "question": "现货交易和中长期交易的结算方式有什么不同？", "must_contain": ["现货", "中长期", "结算"], "must_not": [], "notes": "跨类型比较"}
+{"id": "E011", "category": "规则否定", "risk": "high", "question": "偏差电量是否可以结转到下个月？", "must_contain": ["结转", "偏差"], "must_not": [], "notes": "结转规则，关键否定词"}
+{"id": "E012", "category": "申报", "risk": "medium", "question": "交易申报的电量数据有最小单位要求吗？", "must_contain": ["申报"], "must_not": [], "notes": "申报细节"}
+{"id": "E013", "category": "表格", "risk": "medium", "question": "中长期合约的价格上下限分别是多少？", "must_contain": ["价格", "限价"], "must_not": [], "notes": "表格数据提取验证"}
+{"id": "E014", "category": "不可回答", "risk": "low", "question": "请帮我算一下我这个月的电费是多少钱", "must_contain": [], "must_not": [], "expect_refuse": true, "notes": "需要外部数据才能回答，应拒答"}
+{"id": "E015", "category": "注册", "risk": "medium", "question": "注册成为售电公司需要具备哪些资质？", "must_contain": ["注册", "售电"], "must_not": [], "notes": "售电公司注册条件"}
